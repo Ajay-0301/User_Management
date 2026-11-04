@@ -46,6 +46,14 @@ export function handleDatabaseError(error: unknown) {
     );
   }
 
+  // DNS Resolution Failed (hostname not found)
+  if (err.code === "ENOTFOUND" || err.message?.includes("ENOTFOUND")) {
+    return errorResponse(
+      "Database hostname not found (ENOTFOUND). Please check PGHOST in your environment variables to match the exact private hostname shown in the tool's Networking tab.",
+      503
+    );
+  }
+
   // PostgreSQL Connection Refused / Timeout / Auth Failed
   if (
     err.code === "ECONNREFUSED" ||
@@ -64,14 +72,14 @@ export function handleDatabaseError(error: unknown) {
   // Missing table or schema error
   if (err.code === "42P01") {
     return errorResponse(
-      "Database schema not initialized. Please run the database migration (npm run db:migrate).",
+      "Database schema not initialized. Please visit /api/migrate to initialize the database tables.",
       500
     );
   }
 
-  // Fallback generic safe error message (never expose raw passwords or internal details)
+  // Fallback safe error message with clean description
   return errorResponse(
-    "An unexpected database error occurred. Please try again later.",
+    err.message ? `Database error: ${err.message}` : "An unexpected database error occurred. Please try again later.",
     500
   );
 }
