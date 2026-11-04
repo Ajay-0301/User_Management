@@ -10,7 +10,7 @@ export async function GET() {
   // Return HTTP 200 so container load balancers (like Nimbuz / Nginx) recognize the container as alive
   return NextResponse.json(
     {
-      status: "healthy",
+      status: check.ok ? "connected" : "error",
       database: check.ok ? "connected" : "disconnected",
       message: check.ok ? "PostgreSQL database is connected" : check.message,
       timestamp: new Date().toISOString(),

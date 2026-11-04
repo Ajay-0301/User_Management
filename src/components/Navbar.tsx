@@ -18,7 +18,7 @@ export default function Navbar({ onToggleSidebar, title, onAddUser }: NavbarProp
       setDbStatus("checking");
       const res = await fetch("/api/health", { cache: "no-store" });
       const data = await res.json();
-      if (res.ok && data.status === "connected") {
+      if (res.ok && (data.status === "connected" || data.database === "connected" || data.status === "healthy")) {
         setDbStatus("connected");
         setDbMessage("PostgreSQL Connected");
       } else {

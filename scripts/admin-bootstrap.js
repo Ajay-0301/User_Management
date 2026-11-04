@@ -102,3 +102,4 @@ runBootstrap().catch((err) => {
   console.error("Fatal bootstrap initialization error:", err);
   process.exit(1);
 });
+
