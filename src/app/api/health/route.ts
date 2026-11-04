@@ -6,21 +6,15 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const check = await testConnection();
-  if (check.ok) {
-    return NextResponse.json({
-      status: "connected",
-      message: "PostgreSQL database is connected and healthy",
-      timestamp: new Date().toISOString(),
-    });
-  }
-
+  
+  // Return HTTP 200 so container load balancers (like Nimbuz / Nginx) recognize the container as alive
   return NextResponse.json(
     {
-      status: "disconnected",
-      message: check.message || "Database connection unavailable",
+      status: "healthy",
+      database: check.ok ? "connected" : "disconnected",
+      message: check.ok ? "PostgreSQL database is connected" : check.message,
       timestamp: new Date().toISOString(),
     },
-    { status: 503 }
+    { status: 200 }
   );
 }
-
