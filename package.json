@@ -9,6 +9,7 @@
     "lint": "next lint",
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
+    "admin:bootstrap": "node scripts/admin-bootstrap.js",
     "test:crud": "node scripts/test-crud.js",
     "test:api": "node scripts/test-api.js"
   },
