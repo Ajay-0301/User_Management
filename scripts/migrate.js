@@ -8,23 +8,39 @@ try {
   require("dotenv").config({ path: path.resolve(process.cwd(), ".env.local") });
   require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
 } catch {
-  // Ignore if dotenv is not yet installed or files don't exist
+  // Ignore
 }
 
-const config = {
-  host: process.env.PGHOST || "localhost",
-  port: parseInt(process.env.PGPORT || "5432", 10),
-  user: process.env.PGUSER || "postgres",
-  password: process.env.PGPASSWORD || "",
-  database: process.env.PGDATABASE || "user_management_demo",
-  ssl:
-    process.env.PGSSL === "true" || process.env.PGSSL === "require"
-      ? { rejectUnauthorized: false }
-      : false,
+const getSsl = () => {
+  const pgSsl = (process.env.PGSSL || process.env.PGSSLMODE || process.env.POSTGRES_SSL || "").toLowerCase();
+  if (pgSsl === "false" || pgSsl === "disable" || pgSsl === "off") {
+    return false;
+  }
+  if (pgSsl === "true" || pgSsl === "require" || pgSsl === "prefer") {
+    return { rejectUnauthorized: false };
+  }
+  return false;
 };
 
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+const config = connectionString
+  ? { connectionString, ssl: getSsl() }
+  : {
+      host: process.env.PGHOST || process.env.POSTGRES_HOST || process.env.DB_HOST || "localhost",
+      port: parseInt(process.env.PGPORT || process.env.POSTGRES_PORT || process.env.DB_PORT || "5432", 10),
+      user: process.env.PGUSER || process.env.POSTGRES_USER || process.env.DB_USER || "postgres",
+      password: process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD || "",
+      database: process.env.PGDATABASE || process.env.POSTGRES_DB || process.env.DB_NAME || "postgres",
+      ssl: getSsl(),
+    };
+
 async function ensureDatabaseExists() {
+  if (connectionString) return; // Skip if using direct connection string
+
   const targetDb = config.database;
+  if (!targetDb || targetDb === "postgres") return;
+
   const adminClient = new Client({
     ...config,
     database: "postgres",
@@ -39,17 +55,13 @@ async function ensureDatabaseExists() {
 
     if (res.rowCount === 0) {
       console.log(`Database "${targetDb}" does not exist. Creating it now...`);
-      // Database names cannot be parameterized in CREATE DATABASE, validate identifier safely
       if (/^[a-zA-Z0-9_]+$/.test(targetDb)) {
         await adminClient.query(`CREATE DATABASE "${targetDb}"`);
         console.log(`✓ Database "${targetDb}" created successfully.`);
-      } else {
-        throw new Error(`Invalid database name: ${targetDb}`);
       }
     }
   } catch (err) {
-    // If admin connection fails, we log and proceed — target database might already exist or admin access is restricted
-    console.warn(`[Migration Check] Notice while checking database existence: ${err.message}`);
+    console.warn(`[Migration Notice] Database existence check notice: ${err.message}`);
   } finally {
     try {
       await adminClient.end();
@@ -63,10 +75,10 @@ async function runMigrations() {
   console.log("=========================================");
   console.log("   Starting Database Migrations");
   console.log("=========================================");
-  console.log(`Host:     ${config.host}`);
-  console.log(`Port:     ${config.port}`);
-  console.log(`User:     ${config.user}`);
-  console.log(`Database: ${config.database}`);
+  console.log(`Host:     ${config.host || "via connectionString"}`);
+  console.log(`Port:     ${config.port || "default"}`);
+  console.log(`User:     ${config.user || "default"}`);
+  console.log(`Database: ${config.database || "default"}`);
   console.log(`SSL:      ${Boolean(config.ssl)}`);
   console.log("-----------------------------------------");
 
@@ -76,7 +88,6 @@ async function runMigrations() {
 
   const client = await pool.connect();
   try {
-    // 1. Create schema_migrations table if not exists
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         id SERIAL PRIMARY KEY,
@@ -85,7 +96,6 @@ async function runMigrations() {
       );
     `);
 
-    // 2. Read migration files
     const migrationsDir = path.resolve(__dirname, "../migrations");
     if (!fs.existsSync(migrationsDir)) {
       console.log(`No migrations directory found at ${migrationsDir}`);
@@ -102,7 +112,6 @@ async function runMigrations() {
       return;
     }
 
-    // 3. Query already executed migrations
     const executedRes = await client.query(
       "SELECT name FROM schema_migrations"
     );
@@ -153,4 +162,3 @@ async function runMigrations() {
 }
 
 runMigrations();
-

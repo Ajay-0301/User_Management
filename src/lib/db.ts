@@ -1,4 +1,4 @@
-import { Pool, QueryResult, QueryResultRow } from "pg";
+import { Pool, PoolConfig, QueryResult, QueryResultRow } from "pg";
 
 const globalForPg = globalThis as unknown as {
   pool: Pool | undefined;
@@ -6,30 +6,52 @@ const globalForPg = globalThis as unknown as {
 
 // Determine SSL options based on environment variables
 const getSslConfig = () => {
-  const pgSsl = process.env.PGSSL?.toLowerCase();
+  const pgSsl = (process.env.PGSSL || process.env.PGSSLMODE || process.env.POSTGRES_SSL || "").toLowerCase();
   const nodeEnv = process.env.NODE_ENV;
 
-  if (pgSsl === "true" || pgSsl === "require" || (nodeEnv === "production" && pgSsl !== "false")) {
+  // Explicitly disabled
+  if (pgSsl === "false" || pgSsl === "disable" || pgSsl === "off") {
+    return false;
+  }
+
+  // Explicitly enabled
+  if (pgSsl === "true" || pgSsl === "require" || pgSsl === "prefer" || (nodeEnv === "production" && pgSsl === "require")) {
     return {
       rejectUnauthorized: false,
     };
   }
+
   return false;
 };
 
-export const pool =
-  globalForPg.pool ??
-  new Pool({
-    host: process.env.PGHOST || "localhost",
-    port: Number(process.env.PGPORT || 5432),
-    user: process.env.PGUSER || "postgres",
-    password: process.env.PGPASSWORD || "",
-    database: process.env.PGDATABASE || "user_management_demo",
+// Build pool configuration supporting connection strings or individual variables
+function createPoolConfig(): PoolConfig {
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+  if (connectionString) {
+    return {
+      connectionString,
+      ssl: getSslConfig(),
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    };
+  }
+
+  return {
+    host: process.env.PGHOST || process.env.POSTGRES_HOST || process.env.DB_HOST || "localhost",
+    port: Number(process.env.PGPORT || process.env.POSTGRES_PORT || process.env.DB_PORT || 5432),
+    user: process.env.PGUSER || process.env.POSTGRES_USER || process.env.DB_USER || "postgres",
+    password: process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD || "",
+    database: process.env.PGDATABASE || process.env.POSTGRES_DB || process.env.DB_NAME || "postgres",
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     ssl: getSslConfig(),
-  });
+  };
+}
+
+export const pool = globalForPg.pool ?? new Pool(createPoolConfig());
 
 if (process.env.NODE_ENV !== "production") {
   globalForPg.pool = pool;
@@ -81,4 +103,3 @@ export async function testConnection(): Promise<{ ok: boolean; message?: string 
     };
   }
 }
-
